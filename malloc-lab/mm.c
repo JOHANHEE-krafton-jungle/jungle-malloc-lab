@@ -112,7 +112,7 @@ static void *extend_heap(size_t words)
 static void *find_fit(size_t size) {
     // size를 받아서, 해당 size에 적합한 블록의 포인터를 반환함
 
-    // first fit으로 해보자
+    // first fit 버전
     // 전체 블록 순회하면서, 이미 할당된 상태이면 패스, 가용 가능하고 크기가 인자값 size보다 크거나 같으면 해당 블록의 시작 주소 반환
 
     char *curr_ptr = heap_listp;
@@ -208,6 +208,7 @@ void *mm_malloc(size_t size)
 /*
  * mm_free - Freeing a block does nothing.
  */
+
 void mm_free(void *bp)
 {
     size_t size = GET_SIZE(HDRP(bp));
