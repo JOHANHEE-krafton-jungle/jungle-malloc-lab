@@ -49,8 +49,8 @@ team_t team = {
 #define MAX(x, y) ((x) > (y) ? (x) : (y))
 #define PACK(size, alloc) ((size) | (alloc)) /* 워드에 사이즈와 할당 여부를 표시 */
 
-#define GET(p) (*(unsigned int *)(p)) // p가 참조하는 워드를 읽어서 리턴함
-#define PUT(p, val) (*(unsigned int *)(p) = (val)) /* p를 unsigned int를 가리키는 포인터로 형변환한 뒤, p가 가리키는 메모리 공간에 val 값을 저장 */
+#define GET(p) (*(unsigned long *)(p)) // p가 참조하는 워드를 읽어서 리턴함
+#define PUT(p, val) (*(unsigned long *)(p) = (val)) /* p를 unsigned int를 가리키는 포인터로 형변환한 뒤, p가 가리키는 메모리 공간에 val 값을 저장 */
 
 #define GET_SIZE(p) (GET(p) & ~0x7) // 주소 p에 있는 헤더에서 사이즈를 리턴함
 #define GET_ALLOC(p) (GET(p) & 0x1) // 주소 p에 있는 헤더에서 할당 여부를 리턴함
