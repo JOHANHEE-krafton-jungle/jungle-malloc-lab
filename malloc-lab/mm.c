@@ -207,7 +207,7 @@ static void *find_fit(size_t size) {
     // size를 받아서, 해당 size에 적합한 블록의 node 포인터를 반환함
 
     // first fit 버전
-    // 가용 리스트 순회하면서, 이미 할당된 상태이면 패스, 가용 가능하고 크기가 인자 값 size보다 크거나 같으면 해당 블록의 시작 주소 반환
+    // 가용 리스트 순회하면서, 이미 할당된 상태이면 패스, 가용 가능하고 크기가 인자 값 size보c다 크거나 같으면 해당 블록의 시작 주소 반환
 
     int index = (mm_log2(size) > 20) ? 15 : mm_log2(size) - 5;
 
