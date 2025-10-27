@@ -308,8 +308,6 @@ void *mm_malloc(size_t size)
         return (char *)bp;
     }
 
-    printf("추가 요청 \n");
-
     // 적절한 가용 리스트를 못 찾으면 추가 메모리를 요청함
     extendedSize = MAX(adjustedSize, CHUNKSIZE);
     if ((bp = extend_heap(extendedSize/WSIZE)) == NULL) {
