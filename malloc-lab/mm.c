@@ -74,7 +74,7 @@ typedef struct _struct_free_list {
 // 힙 영역의 데이터 블록 시작 부분을 가리킴 (prologue 바로 뒤)
 static char* heap_listp; 
 // 가용 리스트
-static freeList free_list_array[8];
+static freeList free_list_array[16];
 
 int mm_log2(unsigned long asize) {
     // log2 함수
@@ -143,21 +143,21 @@ static void *coalesce(void *bp)
     size_t size = GET_SIZE(HDRP(bp));
 
     if (prev_alloc && next_alloc) { // 앞 뒤 모두 할당된 상태
-        int index = (mm_log2(size) > 11) ? 7 : mm_log2(size) - 5;
+        int index = (mm_log2(size) > 20) ? 15 : mm_log2(size) - 5;
         insert_node(&(free_list_array[index]), bp);
         return bp;
     } else if (prev_alloc && !next_alloc) { // 뒤에만 가용인 상태
-        int next_index = (mm_log2(next_size) > 11) ? 7 : mm_log2(next_size) - 5;
+        int next_index = (mm_log2(next_size) > 20) ? 15 : mm_log2(next_size) - 5;
         delete_node(&(free_list_array[next_index]), NEXT_BLKP(bp));
 
         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size, 0));
 
-        int index = (mm_log2(size) > 11) ? 7 : mm_log2(size) - 5;
+        int index = (mm_log2(size) > 20) ? 15 : mm_log2(size) - 5;
         insert_node(&(free_list_array[index]), bp);
     } else if (!prev_alloc && next_alloc) { // 앞에만 가용인 상태
-        int prev_index = (mm_log2(prev_size) > 11) ? 7 : mm_log2(prev_size) - 5;
+        int prev_index = (mm_log2(prev_size) > 20) ? 15 : mm_log2(prev_size) - 5;
         delete_node(&(free_list_array[prev_index]), PREV_BLKP(bp));
 
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
@@ -165,11 +165,11 @@ static void *coalesce(void *bp)
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
 
-        int index = (mm_log2(size) > 11) ? 7 : mm_log2(size) - 5;
+        int index = (mm_log2(size) > 20) ? 15 : mm_log2(size) - 5;
         insert_node(&(free_list_array[index]), bp);
     } else {
-        int next_index = (mm_log2(next_size) > 11) ? 7 : mm_log2(next_size) - 5;
-        int prev_index = (mm_log2(prev_size) > 11) ? 7 : mm_log2(prev_size) - 5;
+        int next_index = (mm_log2(next_size) > 20) ? 15 : mm_log2(next_size) - 5;
+        int prev_index = (mm_log2(prev_size) > 20) ? 15 : mm_log2(prev_size) - 5;
         delete_node(&(free_list_array[next_index]), NEXT_BLKP(bp));
         delete_node(&(free_list_array[prev_index]), PREV_BLKP(bp));
 
@@ -178,7 +178,7 @@ static void *coalesce(void *bp)
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
 
-        int index = (mm_log2(size) > 11) ? 7 : mm_log2(size) - 5;
+        int index = (mm_log2(size) > 20) ? 15 : mm_log2(size) - 5;
         insert_node(&(free_list_array[index]), bp);
     }
     return bp;
@@ -209,9 +209,9 @@ static void *find_fit(size_t size) {
     // first fit 버전
     // 가용 리스트 순회하면서, 이미 할당된 상태이면 패스, 가용 가능하고 크기가 인자 값 size보다 크거나 같으면 해당 블록의 시작 주소 반환
 
-    int index = (mm_log2(size) > 11) ? 7 : mm_log2(size) - 5;
+    int index = (mm_log2(size) > 20) ? 15 : mm_log2(size) - 5;
 
-    while (index < 8) {
+    while (index < 16) {
         freeListNode *currNode = free_list_array[index].head;
 
         while (currNode != NULL) {
@@ -233,7 +233,7 @@ static void place(freeListNode *node, size_t size) {
     char *bp = (char *)node;
     size_t prev_size = GET_SIZE(HDRP(bp));
 
-    int index = (mm_log2(prev_size) > 11) ? 7 : mm_log2(prev_size) - 5;
+    int index = (mm_log2(prev_size) > 20) ? 15 : mm_log2(prev_size) - 5;
 
     if ((prev_size - size) >= (2*DSIZE)) {
         // bp로 시작하는 메모리 공간에 adjustedSize만큼 공간 할당
@@ -269,7 +269,7 @@ int mm_init(void)
     PUT(heap_listp + (3*WSIZE), PACK(0, 1)); // Epilogue header
     heap_listp += (2*WSIZE); // prologue 건너뛰고, 실제 데이터 공간으로 이동
     
-    for (int i=0; i<8; i++) {
+    for (int i=0; i<16; i++) {
         free_list_array[i].head = NULL;
         free_list_array[i].tail = NULL;
     }
@@ -340,31 +340,114 @@ void mm_free(void *bp)
  */
 void *mm_realloc(void *ptr, size_t size)
 {
-    void *oldptr = ptr;
-    void *newptr;
-    size_t copySize;
+    if (!ptr)
+        return mm_malloc(size);
 
-    newptr = mm_malloc(size);
-    if (newptr == NULL)
+    if (size == 0) {
+        mm_free(ptr);
         return NULL;
-    // copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
-    copySize = GET_SIZE(HDRP(oldptr));
-    if (size < copySize)
-        copySize = size;
-    memcpy(newptr, oldptr, copySize);
-    mm_free(oldptr);
-    return newptr;
+    }
+
+    char *oldptr = ptr;
+    size_t oldSize = GET_SIZE(HDRP(oldptr)); // 전체 크기
+    size_t asize = DSIZE * (((size) + (DSIZE) + (DSIZE-1)) / DSIZE); // 확장하려는 size를 16B의 배수로 올림 (페이로드 크기가 아니라, 블록 전체 크기가 됨)
+
+    if (oldSize == asize) {
+        return oldptr;
+    }
+
+    if (asize > oldSize) { // 확장하는 경우
+        size_t nextSize = GET_SIZE(HDRP(NEXT_BLKP(oldptr))); // 다음 블록의 전체 크기
+        size_t prevSize = GET_SIZE(FTRP(PREV_BLKP(oldptr))); // 이전 블록의 전체 크기
+
+        if (!(GET_ALLOC(HDRP(NEXT_BLKP(oldptr)))) && nextSize + oldSize >= asize) { // 뒤에 가용 블록이 있고, 뒤 가용 블록의 사이즈가 충분한 경우
+            int index = (mm_log2(nextSize) > 20) ? 15 : mm_log2(nextSize) - 5;
+            delete_node(&(free_list_array[index]), NEXT_BLKP(oldptr)); // 뒤의 가용 블록을 가용 리스트에서 제거
+
+            size_t remainder_size = oldSize + nextSize - asize;
+
+            if ((remainder_size) >= (2*DSIZE)) {
+                PUT(HDRP(oldptr), PACK(asize, 1));
+                PUT(FTRP(oldptr), PACK(asize, 1));
+
+                char *remainder_ptr = NEXT_BLKP(oldptr);
+                PUT(HDRP(remainder_ptr), PACK(remainder_size, 0));
+                PUT(FTRP(remainder_ptr), PACK(remainder_size, 0));
+
+                int rindex = (mm_log2(remainder_size) > 20) ? 15 : mm_log2(remainder_size) - 5;
+                insert_node(&(free_list_array[rindex]), remainder_ptr);
+            } else {
+                PUT(HDRP(oldptr), PACK(oldSize + nextSize, 1));
+                PUT(FTRP(oldptr), PACK(oldSize + nextSize, 1));
+            }
+
+            return oldptr;
+        } else if (!(GET_ALLOC(FTRP(PREV_BLKP(oldptr)))) && prevSize + oldSize >= asize) { // 앞에 가용 블록이 있고, 앞 가용 블록의 사이즈가 충분한 경우
+            int index = (mm_log2(prevSize) > 20) ? 15 : mm_log2(prevSize) - 5;
+            delete_node(&(free_list_array[index]), PREV_BLKP(oldptr)); // 앞의 가용 블록을 가용 리스트에서 제거
+
+            size_t remainder_size = oldSize + prevSize - asize; // 전체 크기
+            char *newptr = PREV_BLKP(oldptr);
+
+            memmove(newptr, oldptr, oldSize-DSIZE);
+
+            if ((remainder_size) >= (2*DSIZE)) {
+                PUT(HDRP(newptr), PACK(asize, 1));
+                PUT(FTRP(newptr), PACK(asize, 1));
+
+                char *remainder_ptr = NEXT_BLKP(newptr);
+                PUT(HDRP(remainder_ptr), PACK(remainder_size, 0));
+                PUT(FTRP(remainder_ptr), PACK(remainder_size, 0));
+
+                int rindex = (mm_log2(remainder_size) > 20) ? 15 : mm_log2(remainder_size) - 5;
+                insert_node(&(free_list_array[rindex]), remainder_ptr);
+            } else {
+                PUT(HDRP(newptr), PACK(oldSize + prevSize, 1));
+                PUT(FTRP(newptr), PACK(oldSize + prevSize, 1));
+            }
+
+            return newptr;
+        } else { // 앞 뒤 둘다 가용 블록이 없는 경우 
+            void *newptr = mm_malloc(size); // malloc해서 새롭게 추가해야함
+            if (!newptr) return NULL;
+
+            memcpy(newptr, oldptr, oldSize-DSIZE);
+            mm_free(oldptr);
+            return newptr;
+        }
+    } else { // 축소하는 경우
+        size_t remainder_size = oldSize - asize; // 전체 크기
+
+        if ((remainder_size) >= (2*DSIZE)) { // 나머지 블록 쪼개서 쓰기
+            PUT(HDRP(oldptr), PACK(asize, 1));
+            PUT(FTRP(oldptr), PACK(asize, 1));
+
+            char *remainder_ptr = NEXT_BLKP(oldptr);
+            PUT(HDRP(remainder_ptr), PACK(remainder_size, 0));
+            PUT(FTRP(remainder_ptr), PACK(remainder_size, 0));
+
+            int rindex = (mm_log2(remainder_size) > 20) ? 15 : mm_log2(remainder_size) - 5;
+            insert_node(&(free_list_array[rindex]), remainder_ptr);
+        } 
+        
+        return oldptr;
+    }
 }
 
 /*
-8
-16
+같으면 그냥 반환
+늘리는 경우 -> 기존 사이즈에서 해결 가능하면 그냥 반환 / 해결 불가능하면 해당 사이즈 가용 리스트에 접근해서 새로 malloc -> 기존 꺼 free
+줄이는 경우 -> 해당 클래스 가용 리스트 안에서 할 수 있으면 그냥 반환 / 해결 불가능하면 해당 해당 사이즈 가용 리스트에 접근해서 새로 malloc -> 기존 꺼 free
+
+*/
+
+/*
 32
 64
-128
-256
-512
-1024
-2048
-4096
+.
+.
+.
+1048576
+
+(총 16개)
 */
