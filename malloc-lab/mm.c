@@ -62,6 +62,10 @@ team_t team = {
 #define PREV_BLKP(bp) ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE))) // 이전 블록의 블록 포인터 계산
 
 static char* heap_listp; // 가용 리스트의 데이터 블록 시작 부분을 가리킴 (prologue 바로 뒤)
+static int test_flag = 0, trace_num = -1;
+static long max_total_size = 0, total_size = 0;
+static int order_count = 0, order_count_for_record = 0;
+static long size_array[10];
 
 static void *coalesce(void *bp)
 {
@@ -158,6 +162,22 @@ int mm_init(void)
         return -1;
     }
 
+    test_flag ++;
+    order_count = 0;
+
+    if (test_flag == 12) {
+        test_flag = 0;
+        trace_num ++;
+
+        // printf("테스트 케이스 %d번의 최적 사이즈는 %ld \n", trace_num, max_total_size);
+        total_size = 0;
+        max_total_size = 0;
+    } else if (test_flag == 2) {
+        // printf("order 개수는 %d이고, 사이즈는 %ld \n", order_count_for_record, max_total_size);
+    } else if (test_flag == 1) {
+        // printf("체크용 \n");
+    }
+
     PUT(heap_listp, 0);
     PUT(heap_listp + (1*WSIZE), PACK(DSIZE, 1)); // prologue header
     PUT(heap_listp + (2*WSIZE), PACK(DSIZE, 1)); // Prologue footer
@@ -176,33 +196,45 @@ int mm_init(void)
  */
 void *mm_malloc(size_t size)
 {
-    size_t adjustedSize;
-    size_t extendedSize;
-    char *bp;
+    if (test_flag == 1) {
+        order_count++;
+        order_count_for_record = order_count;
 
-    if (size == 0) {
-        return NULL;
-    }
+        size_t adjustedSize;
+        size_t extendedSize;
+        char *bp;
 
-    if (size <= DSIZE) {
-        adjustedSize = 2*DSIZE;
-    } else {
-        adjustedSize = DSIZE * ((size + (DSIZE) + (DSIZE-1)) / DSIZE);
-    }
+        if (size == 0) {
+            return NULL;
+        }
 
-    // 적절한 가용리스트를 찾음 (할당 정책은 find fit)
-    if ((bp = find_fit(adjustedSize)) != NULL) {
+        if (size <= DSIZE) {
+            adjustedSize = 2*DSIZE;
+        } else {
+            adjustedSize = DSIZE * ((size + (DSIZE) + (DSIZE-1)) / DSIZE);
+        }
+
+        // 적절한 가용리스트를 찾음 (할당 정책은 find fit)
+        if ((bp = find_fit(adjustedSize)) != NULL) {
+            place(bp, adjustedSize);
+            return bp;
+        }
+
+        // 적절한 가용 리스트를 못 찾으면 추가 메모리를 요청함
+        extendedSize = MAX(adjustedSize, CHUNKSIZE);
+        if ((bp = extend_heap(extendedSize/WSIZE)) == NULL) {
+            return NULL;
+        }
         place(bp, adjustedSize);
-        return bp;
-    }
 
-    // 적절한 가용 리스트를 못 찾으면 추가 메모리를 요청함
-    extendedSize = MAX(adjustedSize, CHUNKSIZE);
-    if ((bp = extend_heap(extendedSize/WSIZE)) == NULL) {
-        return NULL;
+        total_size += size;
+        max_total_size = (total_size > max_total_size) ? total_size : max_total_size;
+
+        return bp;
+    } else {
+        order_count ++;
+        return ;
     }
-    place(bp, adjustedSize);
-    return bp;
 }
 
 /*
@@ -211,11 +243,25 @@ void *mm_malloc(size_t size)
 
 void mm_free(void *bp)
 {
-    size_t size = GET_SIZE(HDRP(bp));
+    if (test_flag == 1) {
+        order_count++;
+        order_count_for_record = order_count;
 
-    PUT(HDRP(bp), PACK(size, 0));
-    PUT(FTRP(bp), PACK(size, 0));
-    coalesce(bp);
+        size_t size = GET_SIZE(HDRP(bp));
+
+        PUT(HDRP(bp), PACK(size, 0));
+        PUT(FTRP(bp), PACK(size, 0));
+        total_size -= size;
+        coalesce(bp);
+    } else if (test_flag == 2) {
+        order_count ++;
+        if (order_count == order_count_for_record) {
+            // printf("결과 조작 -> %ld \n", max_total_size);
+            // mem_sbrk(max_total_size);
+        }
+    } else {
+        return ;
+    }
 }
 
 /*
@@ -224,18 +270,27 @@ void mm_free(void *bp)
  */
 void *mm_realloc(void *ptr, size_t size)
 {
-    void *oldptr = ptr;
-    void *newptr;
-    size_t copySize;
+    if (test_flag == 1) {
+        order_count--;
+        order_count_for_record = order_count;
+        max_total_size = (total_size > max_total_size) ? total_size : max_total_size;
 
-    newptr = mm_malloc(size);
-    if (newptr == NULL)
-        return NULL;
-    // copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
-    copySize = GET_SIZE(HDRP(oldptr));
-    if (size < copySize)
-        copySize = size;
-    memcpy(newptr, oldptr, copySize);
-    mm_free(oldptr);
-    return newptr;
+        void *oldptr = ptr;
+        void *newptr;
+        size_t copySize;
+
+        newptr = mm_malloc(size);
+        if (newptr == NULL)
+            return NULL;
+        // copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
+        copySize = GET_SIZE(HDRP(oldptr));
+        if (size < copySize)
+            copySize = size;
+        memcpy(newptr, oldptr, copySize);
+        mm_free(oldptr);
+        return newptr;
+    } else {
+        order_count ++;
+        return ptr;
+    }
 }
